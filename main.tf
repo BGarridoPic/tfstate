@@ -7,7 +7,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "BGarrido-Bucket-TF-State-1234567890"
+    bucket         = "bgarrido-bucket-tf-state-1234567890"
     key            = "prod/terraform.tfstate"
     region         = "eu-west-3"
     dynamodb_table = "terraform-lock-table"
