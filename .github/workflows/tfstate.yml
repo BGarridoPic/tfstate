@@ -1,0 +1,74 @@
+name: Deploy Infra with Auto-Bootstrap
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  TF_STATE_BUCKET_NAME: "BGarrido-Bucket-TF-State-1234567890"
+  TF_LOCK_TABLE_NAME: "terraform-lock-table"
+  AWS_REGION: "eu-west-3"
+
+jobs:
+  terraform:
+    name: Terraform Workflow
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Bootstrap Backend (Create S3 & DynamoDB if missing)
+        run: |
+          # 1. Crear Bucket S3 si no existe
+          if aws s3api head-bucket --bucket "$TF_STATE_BUCKET_NAME" 2>/dev/null; then
+            echo "Bucket $TF_STATE_BUCKET_NAME ya existe."
+          else
+            echo "Creando bucket $TF_STATE_BUCKET_NAME..."
+            aws s3api create-bucket --bucket "$TF_STATE_BUCKET_NAME" --region "$AWS_REGION"
+            
+            # Habilitar Versioning (Recomendado)
+            aws s3api put-bucket-versioning --bucket "$TF_STATE_BUCKET_NAME" --versioning-configuration Status=Enabled
+            echo "Bucket creado y versionado."
+          fi
+
+          # 2. Crear Tabla DynamoDB si no existe
+          if aws dynamodb describe-table --table-name "$TF_LOCK_TABLE_NAME" 2>/dev/null; then
+             echo "Tabla DynamoDB $TF_LOCK_TABLE_NAME ya existe."
+          else
+             echo "Creando tabla DynamoDB $TF_LOCK_TABLE_NAME..."
+             aws dynamodb create-table \
+                --table-name "$TF_LOCK_TABLE_NAME" \
+                --attribute-definitions AttributeName=LockID,AttributeType=S \
+                --key-schema AttributeName=LockID,KeyType=HASH \
+                --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
+                --region "$AWS_REGION"
+             echo "Tabla creada."
+          fi
+
+      # --- FLUJO NORMAL DE TERRAFORM ---
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+      - name: Verify Deployment
+        run: |
+          sleep 60
+
+      - name: Terraform Destroy
+        if: always()
+        run: terraform destroy -auto-approve 
