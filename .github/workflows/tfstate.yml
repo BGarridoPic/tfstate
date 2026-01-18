@@ -28,30 +28,33 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
-# --- PASO CORREGIDO: BOOTSTRAP ---
+
       - name: Bootstrap Backend (Create S3 & DynamoDB if missing)
         run: |
           # 1. Crear Bucket S3 si no existe
           if aws s3api head-bucket --bucket "$TF_STATE_BUCKET_NAME" 2>/dev/null; then
             echo "Bucket $TF_STATE_BUCKET_NAME ya existe."
           else
-            echo "Creando bucket $TF_STATE_BUCKET_NAME en $AWS_REGION..."
+            echo "El bucket no existe. Creando $TF_STATE_BUCKET_NAME en $AWS_REGION..."
             
-            if [ "$AWS_REGION" == "eu-west-3" ]; then
-              # Comando simple para eu-west-3
+            if [ "$AWS_REGION" == "us-east-1" ]; then
+              # COMANDO PARA US-EAST-1 (Sin constraint)
               aws s3api create-bucket --bucket "$TF_STATE_BUCKET_NAME" --region "$AWS_REGION"
             else
-              # Comando con Constraint para cualquier otra región (Europa, Asia, etc.)
-              aws s3api create-bucket --bucket "$TF_STATE_BUCKET_NAME" --region "$AWS_REGION" \
+              # COMANDO PARA RESTO DEL MUNDO (eu-west-3, etc.)
+              # Aquí es donde fallaba: Es vital pasar el LocationConstraint exacto
+              aws s3api create-bucket \
+                --bucket "$TF_STATE_BUCKET_NAME" \
+                --region "$AWS_REGION" \
                 --create-bucket-configuration LocationConstraint="$AWS_REGION"
             fi
             
-            # Habilitar Versioning (Siempre recomendado)
+            # Habilitar Versioning (Vital para no perder el estado)
             aws s3api put-bucket-versioning --bucket "$TF_STATE_BUCKET_NAME" --versioning-configuration Status=Enabled
-            echo "Bucket creado y versionado correctamente."
+            echo "Bucket creado y versionado exitosamente."
           fi
 
-          # 2. Crear Tabla DynamoDB si no existe (Esto no cambia)
+          # 2. Crear Tabla DynamoDB si no existe
           if aws dynamodb describe-table --table-name "$TF_LOCK_TABLE_NAME" 2>/dev/null; then
              echo "Tabla DynamoDB $TF_LOCK_TABLE_NAME ya existe."
           else
