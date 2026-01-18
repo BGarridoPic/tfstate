@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - master
 
 env:
   TF_STATE_BUCKET_NAME: "BGarrido-Bucket-TF-State-1234567890"
