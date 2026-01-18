@@ -76,7 +76,7 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
 
-      # Comentado para probar persistencia. Descoméntalo cuando quieras limpiar todo.
-      # - name: Terraform Destroy
-      #   if: always()
-      #   run: terraform destroy -auto-approve
+
+      - name: Terraform Destroy
+        if: always()
+        run: terraform destroy -auto-approve
