@@ -7,7 +7,8 @@ on:
       - master
 
 env:
-  TF_STATE_BUCKET_NAME: "BGarrido-Bucket-TF-State-1234567890"
+  # Nombres validados (minúsculas)
+  TF_STATE_BUCKET_NAME: "bgarrido-bucket-tf-state-1234567890" 
   TF_LOCK_TABLE_NAME: "terraform-lock-table"
   AWS_REGION: "eu-west-3"
 
@@ -25,36 +26,33 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }} # Bien hecho añadiendo esto
           aws-region: ${{ env.AWS_REGION }}
 
-
+      # --- BOOTSTRAP (Backend S3 + DynamoDB) ---
       - name: Bootstrap Backend (Create S3 & DynamoDB if missing)
         run: |
-          # 1. Crear Bucket S3 si no existe
+          # 1. Crear Bucket S3
           if aws s3api head-bucket --bucket "$TF_STATE_BUCKET_NAME" 2>/dev/null; then
             echo "Bucket $TF_STATE_BUCKET_NAME ya existe."
           else
             echo "El bucket no existe. Creando $TF_STATE_BUCKET_NAME en $AWS_REGION..."
             
             if [ "$AWS_REGION" == "us-east-1" ]; then
-              # COMANDO PARA US-EAST-1 (Sin constraint)
               aws s3api create-bucket --bucket "$TF_STATE_BUCKET_NAME" --region "$AWS_REGION"
             else
-              # COMANDO PARA RESTO DEL MUNDO (eu-west-3, etc.)
-              # Aquí es donde fallaba: Es vital pasar el LocationConstraint exacto
+              # Tu corrección para eu-west-3:
               aws s3api create-bucket \
                 --bucket "$TF_STATE_BUCKET_NAME" \
                 --region "$AWS_REGION" \
                 --create-bucket-configuration LocationConstraint="$AWS_REGION"
             fi
             
-            # Habilitar Versioning (Vital para no perder el estado)
             aws s3api put-bucket-versioning --bucket "$TF_STATE_BUCKET_NAME" --versioning-configuration Status=Enabled
             echo "Bucket creado y versionado exitosamente."
           fi
 
-          # 2. Crear Tabla DynamoDB si no existe
+          # 2. Crear Tabla DynamoDB
           if aws dynamodb describe-table --table-name "$TF_LOCK_TABLE_NAME" 2>/dev/null; then
              echo "Tabla DynamoDB $TF_LOCK_TABLE_NAME ya existe."
           else
@@ -68,7 +66,7 @@ jobs:
              echo "Tabla creada."
           fi
 
-      # --- FLUJO NORMAL DE TERRAFORM ---
+      # --- TERRAFORM ---
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
@@ -78,10 +76,7 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
 
-      - name: Verify Deployment
-        run: |
-          sleep 60
-
-      - name: Terraform Destroy
-        if: always()
-        run: terraform destroy -auto-approve 
+      # Comentado para probar persistencia. Descoméntalo cuando quieras limpiar todo.
+      # - name: Terraform Destroy
+      #   if: always()
+      #   run: terraform destroy -auto-approve
